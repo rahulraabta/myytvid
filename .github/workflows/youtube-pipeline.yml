@@ -1,0 +1,44 @@
+name: Generate and Upload YouTube Video
+
+on:
+  # 1. Allows you to manually trigger the workflow from the Actions tab (for testing)
+  workflow_dispatch:
+  
+  # 2. Runs automatically every Monday at 9:00 AM UTC
+  schedule:
+    - cron: '0 9 * * 1'
+
+jobs:
+  build-and-upload:
+    # This uses the standard free runner (2-core CPU, 7 GB RAM, 14 GB SSD)
+    # Note: Public repos get upgraded to 4-core, 16 GB RAM for free!
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install FFmpeg (Needed for video processing)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Pipeline Script
+        # Here is where you pass your secrets into the script securely
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YOUTUBE_CLIENT_SECRETS: ${{ secrets.YOUTUBE_CLIENT_SECRETS }}
+          YOUTUBE_REQUEST_TOKEN: ${{ secrets.YOUTUBE_REQUEST_TOKEN }}
+        run: |
+          # Replace this with the actual command to run your script
+          python src/generate_and_upload.py
