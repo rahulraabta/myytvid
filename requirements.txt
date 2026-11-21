@@ -1,3 +1,4 @@
-anthropic
+openai
 edge-tts
 httpx
+curl_cffi
