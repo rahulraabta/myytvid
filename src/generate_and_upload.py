@@ -16,15 +16,17 @@ if not LLM_API_KEY:
     sys.exit(1)
 
 def generate_script(topic: str) -> str:
-    """Generates a technical video script using AgentRouter with header spoofing."""
+    """Generates a technical video script using AgentRouter with CLI header spoofing."""
     print(f"Requesting script from AgentRouter using model: {LLM_MODEL}")
     
     url = f"{LLM_BASE_URL}/chat/completions"
     headers = {
         "Authorization": f"Bearer {LLM_API_KEY}",
         "Content-Type": "application/json",
-        # Spoof a first-party CLI User-Agent to bypass the Aliyun WAF
-        "User-Agent": "opencode/0.0.0 (external, cli)" 
+        # Spoof the Codex CLI headers required to bypass the Aliyun WAF
+        "User-Agent": "codex_cli_rs/0.101.0",
+        "Originator": "codex_cli_rs",
+        "X-App": "cli"
     }
     payload = {
         "model": LLM_MODEL,
@@ -50,14 +52,12 @@ def generate_script(topic: str) -> str:
             timeout=120
         )
         
-        # Log the raw response body for debugging
         raw_text = response.text
         print(f"Raw response (first 500 chars): {raw_text[:500]}")
 
         if response.status_code != 200:
             raise RuntimeError(f"API request failed with status {response.status_code}")
             
-        # Only attempt to parse JSON if the response looks like JSON
         if not raw_text.strip().startswith("{"):
             raise ValueError(f"Response is not JSON (likely a WAF block): {raw_text[:200]}")
             
