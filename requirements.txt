@@ -1,4 +1,2 @@
 anthropic
 edge-tts
-httpx
-curl_cffi
