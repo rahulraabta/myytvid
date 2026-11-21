@@ -5,9 +5,9 @@ import subprocess
 import edge_tts
 from openai import OpenAI
 
-LLM_BASE_URL = "https://agentrouter.org/v1"
-LLM_MODEL = "gpt-6.1-sol"
-LLM_API_KEY = os.environ.get("sk-9tT8c3wNq03GNwFzaTmb1Y20XM7c5r9bcpHQVqYwmCs9m09U")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://agentrouter.org/v1")
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-6.1-sol")
+LLM_API_KEY = os.environ.get("LLM_API_KEY")
 
 if not LLM_API_KEY:
     print("Error: LLM_API_KEY environment variable is not set.")
