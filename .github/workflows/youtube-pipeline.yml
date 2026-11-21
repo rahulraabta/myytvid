@@ -23,9 +23,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Start AgentRouter Spoof Proxy
+        run: |
+          # Install and start the proxy using the official Docker installer
+          curl -fsSL https://raw.githubusercontent.com/trefeon/agentrouter-spoof-proxy/main/scripts/install.sh | bash -s -- --yes --docker
+          
+          # Wait a few seconds for the proxy to initialize and obtain the WAF cookie
+          sleep 10
+          
+          # Verify the proxy is healthy and ready
+          curl -f http://localhost:8318/health
+
       - name: Run Video Pipeline
         env:
+          # Point the Python script to the local proxy
+          LLM_BASE_URL: "http://localhost:8318/v1"
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: "gpt-6.1-sol"
         run: python src/generate_and_upload.py
 
       - name: Upload Video Artifact
