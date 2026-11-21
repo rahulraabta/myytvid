@@ -3,109 +3,47 @@ import sys
 import asyncio
 import subprocess
 import edge_tts
-import httpx
-from openai import OpenAI
+from anthropic import Anthropic
 
-LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://agentrouter.org/v1")
-LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-6.1-sol")
+# AgentRouter's Anthropic-compatible endpoint
+ANTHROPIC_BASE_URL = "https://agentrouter.org"
 LLM_API_KEY = os.environ.get("LLM_API_KEY")
+LLM_MODEL = os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20240620") # Use an Anthropic model name, e.g., 'claude-3-5-sonnet'
 
 if not LLM_API_KEY:
     print("Error: LLM_API_KEY environment variable is not set.")
     sys.exit(1)
 
-# Custom HTTP client to bypass AgentRouter's Aliyun WAF fingerprint check
-http_client = httpx.Client(
-    headers={
-        "User-Agent": "claude-code/1.0.0 (external, cli)",
-        "Accept": "application/json",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-    },
-    timeout=120.0,
-    follow_redirects=True,
-)
-
-client = OpenAI(
+# The sync Anthropic client is on AgentRouter's allowlist
+client = Anthropic(
     api_key=LLM_API_KEY,
-    base_url=LLM_BASE_URL,
-    http_client=http_client,
+    base_url=ANTHROPIC_BASE_URL,
 )
 
-def generate_script(topic: str) -> str:
-    """Generates a technical video script using the AgentRouter API."""
-    print(f"Requesting script from AgentRouter for model: {LLM_MODEL}")
-    
+def _generate_script_sync(topic: str) -> str:
+    """Synchronous call to the Anthropic-compatible endpoint."""
+    response = client.messages.create(
+        model=LLM_MODEL,
+        max_tokens=1024,
+        system="You are a professional technical YouTube scriptwriter. Write a short, engaging 1-minute script.",
+        messages=[
+            {
+                "role": "user",
+                "content": f"Write a script about: {topic}. Do not include scene directions, just the spoken text."
+            }
+        ]
+    )
+    return response.content[0].text
+
+async def generate_script(topic: str) -> str:
+    """Asynchronously generates a script by running the sync call in a thread."""
+    print(f"Requesting script from AgentRouter (Anthropic SDK) for model: {LLM_MODEL}")
     try:
-        response = client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
-                {
-                    "role": "system", 
-                    "content": "You are a professional technical YouTube scriptwriter. Write a short, engaging 1-minute script."
-                },
-                {
-                    "role": "user", 
-                    "content": f"Write a script about: {topic}. Do not include scene directions, just the spoken text."
-                }
-            ]
-        )
-        
-        if isinstance(response, str):
-            raise ValueError(f"AgentRouter returned a raw string (likely an error): {response[:500]}")
-        
-        return response.choices[0].message.content
-        
+        # Run the blocking synchronous call in a separate thread
+        script = await asyncio.to_thread(_generate_script_sync, topic)
+        return script
     except Exception as e:
         print(f"Error during API call: {e}")
         raise
 
-async def generate_audio(text: str, output_file: str):
-    """Generates an MP3 voiceover from text using Edge-TTS."""
-    print("Generating audio with Edge-TTS...")
-    communicate = edge_tts.Communicate(text, "en-US-AndrewNeural")
-    await communicate.save(output_file)
-    print(f"Audio saved to {output_file}")
-
-def create_video(audio_file: str, output_file: str):
-    """Uses FFmpeg to render a video by combining a background with the generated audio."""
-    print("Rendering video with FFmpeg...")
-    command = [
-        "ffmpeg", "-y",
-        "-f", "lavfi", "-i", "color=c=blue:s=1280x720:d=60",
-        "-i", audio_file,
-        "-shortest",
-        "-c:v", "libx264", "-tune", "stillimage",
-        "-c:a", "aac", "-b:a", "192k",
-        "-pix_fmt", "yuv420p",
-        output_file
-    ]
-    subprocess.run(command, check=True, capture_output=True, text=True)
-    print(f"Video saved to {output_file}")
-
-def main():
-    """Orchestrates the video generation pipeline."""
-    topic = "The new features in Python 3.14"
-    audio_file = "voiceover.mp3"
-    video_file = "final_video.mp4"
-
-    print(f"Starting pipeline for topic: {topic}")
-    
-    try:
-        script_text = generate_script(topic)
-        
-        print(f"\n--- SCRIPT PREVIEW ---\n{script_text[:200]}...\n----------------------\n")
-        
-        asyncio.run(generate_audio(script_text, audio_file))
-        
-        create_video(audio_file, video_file)
-        
-        print(f"Pipeline completed. Output saved to {video_file}")
-        
-    except Exception as e:
-        print(f"Pipeline failed: {e}")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
+# ... (keep your existing generate_audio, create_video, and main functions) ...
