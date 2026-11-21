@@ -3,57 +3,57 @@ import sys
 import asyncio
 import subprocess
 import edge_tts
-from anthropic import Anthropic
+import json
+from curl_cffi import requests
 
-# AgentRouter's Anthropic-compatible endpoint
-ANTHROPIC_BASE_URL = "https://agentrouter.org"
+# AgentRouter's OpenAI-compatible endpoint
+LLM_BASE_URL = "https://agentrouter.org/v1"
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-6.1-sol")
 LLM_API_KEY = os.environ.get("LLM_API_KEY")
-# Use a valid Anthropic model name
-LLM_MODEL = os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20240620")
 
 if not LLM_API_KEY:
     print("Error: LLM_API_KEY environment variable is not set.")
     sys.exit(1)
 
-# These headers mimic the official Claude Code CLI, which is required to bypass AgentRouter's WAF.
-# This is the equivalent of what your local LLM proxy does.
-claude_code_headers = {
-    "User-Agent": "claude-cli/2.1.137 (external, sdk-cli)",
-    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,effort-2025-11-24",
-    "x-app": "cli",
-    "x-stainless-lang": "js",
-    "x-stainless-package-version": "0.60.0",
-    "x-stainless-os": "MacOS",
-    "x-stainless-arch": "arm64",
-    "x-stainless-runtime": "node",
-    "x-stainless-runtime-version": "v22.14.0",
-}
-
-client = Anthropic(
-    api_key=LLM_API_KEY,
-    base_url=ANTHROPIC_BASE_URL,
-    default_headers=claude_code_headers,
-)
-
 def generate_script(topic: str) -> str:
-    """Generates a technical video script using the AgentRouter (Anthropic SDK)."""
+    """Generates a technical video script using AgentRouter with a browser TLS fingerprint."""
     print(f"Requesting script from AgentRouter using model: {LLM_MODEL}")
     
+    url = f"{LLM_BASE_URL}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {LLM_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": LLM_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a professional technical YouTube scriptwriter. Write a short, engaging 1-minute script."
+            },
+            {
+                "role": "user",
+                "content": f"Write a script about: {topic}. Do not include scene directions, just the spoken text."
+            }
+        ]
+    }
+
     try:
-        response = client.messages.create(
-            model=LLM_MODEL,
-            max_tokens=1024,
-            system="You are a professional technical YouTube scriptwriter. Write a short, engaging 1-minute script.",
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Write a script about: {topic}. Do not include scene directions, just the spoken text."
-                }
-            ]
+        # impersonate="chrome110" mimics the TLS handshake of a real browser
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            impersonate="chrome110",
+            timeout=120
         )
         
-        # The anthropic SDK returns a different structure
-        return response.content[0].text
+        if response.status_code != 200:
+            print(f"HTTP Error {response.status_code}: {response.text[:500]}")
+            raise RuntimeError(f"API request failed with status {response.status_code}")
+            
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
         
     except Exception as e:
         print(f"Error during API call: {e}")
